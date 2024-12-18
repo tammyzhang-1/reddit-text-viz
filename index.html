@@ -1,0 +1,468 @@
+<html>
+    <head>
+    <title>INFO 6350 Final Project</title>
+      <!-- Base map d3 code and css taken from https://github.com/jeffrz/info3300-fa2024/blob/main/notes/24.10.09.notes.htm -->
+      <script src="https://d3js.org/d3.v7.min.js"></script>
+      <script src="https://d3js.org/topojson.v3.min.js"></script>
+
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
+      
+      <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            font-family: "IBM Plex Sans", serif;
+            box-sizing: border-box;
+        }
+
+        #choropleth {
+            height: 100%;
+            width: 100%;
+        }
+      
+        .state {
+          fill: lightgrey;
+        }
+        .outline {
+          fill: none;
+          stroke: black;
+          stroke-width: 1px;
+        }
+        .graticule {
+            fill: none;
+            stroke: grey;
+            stroke-width: 1px;
+        }
+        .tooltip {
+            pointer-events: none;
+        }
+
+        .container {
+            display: flex;
+            height: 100%;
+            width: 100%;
+        }
+
+        #map {
+            height: 100vh;
+            width: 60vw;
+            position: relative;
+        }
+
+        #sidebar {
+            width: 40vw;
+            height: 100vh;
+            padding: 1em;
+            overflow: scroll;
+            overflow-y: auto;
+        }
+
+        #comments {
+            height: 30vh;
+            overflow: scroll;
+            border: solid thin gray;
+            border-radius: 1em;
+            padding: 1em 1em 0em 1em;
+        }
+
+        ::-webkit-scrollbar {
+            -webkit-appearance: none;
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            border-radius: 5px;
+            background-color: rgb(191, 191, 191);
+            -webkit-box-shadow: 0 0 1px rgba(255,255,255,.5);
+        }
+
+        .entity-group {
+            overflow-wrap: break-word;
+        }
+
+        #dropdown {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 2em;
+            display: inline-block;
+    
+        }
+
+        button * {
+            pointer-events: none;
+            font-family: "IBM Plex Sans", serif;
+        }
+
+        .dropdown-button {
+            color: white;
+            border: solid 1px #788A96;
+            border-radius: 2em;
+            box-shadow: 0px 2px 4px 1px rgba(84, 86, 92, 0.30);
+            background-color: #63666C;
+            cursor: pointer;
+            font-family: 'Poppins';
+            font-weight: 300;
+            font-size: 1.15em;
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            padding: 0.5em 1em;
+            margin: 0 0.35em;
+            text-wrap: nowrap;
+        }
+
+        .arrow {
+            border: solid white;
+            border-width: 0 1px 1px 0;
+            display: inline-block;
+            padding: 0.15em;
+            transition: transform ease-in-out 0.3s;
+            display: block;
+            transform: rotate(45deg);
+            -webkit-transform: rotate(45deg);
+        }
+
+        .active.arrow {
+            transform: rotate(225deg);
+        }
+
+        .dropdown-button:hover {
+            background-color: #7b7e83;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            margin-top: 0.15em;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1000;
+            border-radius: 0.75em;
+            overflow: hidden;
+            width: auto;
+            margin: 0.25em 0.35em;
+        }
+
+        .dropdown-content span {
+            color: #63666C;
+            padding: 0.75em 1.5em;
+            text-decoration: none;
+            display: block;
+            cursor: pointer;
+            border-bottom: solid thin rgb(233, 233, 233);
+            line-height: normal;
+        }
+
+        .dropdown-content span:hover {
+            background-color: #e9e9e9;
+        }
+
+        .selected-option {
+            font-weight: 600;
+        }
+      </style>
+    
+    </head>
+    <body>
+      <div class="container larger">
+        
+      <div id="map">
+
+        <div id="dropdown">
+            <button class="dropdown-button">
+              <span id="dropdown-value" class="dropdown-value">What do you think is the best U.S. state?</span>
+              <span class="arrow"></span>
+            </button>
+            <div class="dropdown-content">
+                <span id="best" class="selected-option">What do you think is the best U.S. state?</span>
+                <span id="avoid">What's the one US state you absolutely will never step foot in and why?</span>
+                <span id="least-talked-about">What is perhaps the least talked about US state?</span>
+                <span id="better">US redditors, what does your state do better than all the others?</span>
+                <span id="thanksgiving">All 50 states are getting together for Thanksgiving dinner. What does your state bring and why?</span>
+            </div>
+        </div>
+
+        <svg id="choropleth" height="600" width="900" style="background: #445;" >
+    
+        </svg>
+      </div>
+      
+      <div id="sidebar">
+        <h2>Can Spacy help visualize geographic responses to r/AskReddit posts?</h2>
+        <p>An exercise in using Spacy's entity recognition to organize thousands of comments on an interactive map for several different r/AskReddit prompts.</p>
+        <p>Hover over a state to begin. Note that numbers refer to cumulative upvotes for comments containing a mention of that state.</p>
+        <p>Click on a state to freeze the sidebar. Click on a state again to go back into hover mode.</p>
+      </div>
+    
+      <script id="notes1">
+    
+      const svg = d3.select("#choropleth");
+      const width = svg.attr("width");
+      const height = svg.attr("height");
+      const margin = { top: 140, right: 90, bottom: 20, left: 10};
+      const mapWidth = width - margin.left - margin.right;
+      const mapHeight = height - margin.top - margin.bottom;
+      const map = svg.append("g")
+                      .attr("transform","translate("+margin.left+","+margin.top+")");
+                      
+      const requestData = async function() {
+
+        let datasetKeys = {
+            'best': 'best-state-results-all-lg.json', 
+            'avoid': 'avoided-states.json', 
+            'least-talked-about': 'least-talked-about.json', 
+            'better': 'better-states.json',
+            'thanksgiving': 'thanksgiving.json'
+        }
+        
+        const dropdown = document.querySelector('#dropdown');
+        const dropdownValue = dropdown.querySelector('.selected-option').id;
+        let currentDataFile = datasetKeys[dropdownValue];
+
+        const us = await d3.json("states-10m.json");
+
+        const redditData = await d3.json(currentDataFile, d3.autoType);
+        
+        let entityTypes = ["FAC", "GPE", "LOC", "WORK_OF_ART", "NORP"];
+        let sidebarFrozen = false;
+
+        var states = topojson.feature(us, us.objects.states); 
+        var statesMesh = topojson.mesh(us, us.objects.states);    
+        var projection = d3.geoAlbersUsa().fitSize([mapWidth, mapHeight], states);
+        var path = d3.geoPath().projection(projection);
+       
+        
+        let statePaths = map.selectAll("path.state").data(states.features)
+                         .join("path")
+                         .attr("class", "state")
+                         .attr("id", d => d.properties.name)
+                         .attr("d", path)
+                         .on('mouseover',  mouseEntersState )
+                         .on('mouseout',  mouseLeavesState )
+                         .on('click', mouseClick);
+      
+        map.append("path").datum(statesMesh)
+           .attr("class","outline")
+           .attr("d", path);
+      
+        const minMax = d3.extent(Object.values(redditData).map(state => state.weight));
+
+        const logScale = d3.scaleLog().domain(minMax).range([0, 1]);
+        const colorScale =  d3.scaleSequential( d => d3.interpolatePuBu(logScale(d)) );
+      
+        map.selectAll(".state")
+           .style("fill", d => {
+            return redditData[d.properties.name] ? colorScale(redditData[d.properties.name]['weight']) : 'gray'});
+    
+      
+        let tooltipWidth = 120;
+        let tooltipHeight = 40;
+        
+        let momesh =  map.append("path")
+                         .attr("class","mouseover outline")
+                         .style("stroke", "black")
+                         .style("stroke-width", 3)
+                         .attr("d", "");
+      
+        let tooltip = map.append("g")
+                         .attr("class","tooltip")
+                         .attr("visibility","hidden");
+        tooltip.append("rect")
+               .attr("fill", "black")
+               .attr("opacity", 0.9)
+               .attr("x", -tooltipWidth / 2.0)
+               .attr("y", 0)
+               .attr("width",tooltipWidth)
+               .attr("height",tooltipHeight)
+        let txt = tooltip.append("text")
+                         .attr("fill", "white")
+                         .attr("text-anchor","middle")
+                         .attr("alignment-baseline","hanging")
+                         .attr("x", 0)
+                         .attr("y", 2);
+        let txt2 = tooltip.append("text")
+                         .attr("fill", "white")
+                         .attr("text-anchor","middle")
+                         .attr("alignment-baseline","hanging")
+                         .attr("x", 0)
+                         .attr("y", 22);
+        
+        function mouseEntersState() {
+          if (!sidebarFrozen) {
+
+          
+          tooltip.style("visibility","visible")
+
+          let state = d3.select(this);
+          
+          let stateID = state.datum().id;
+
+          let stateName = state.datum().properties.name;
+          
+          populateSidebar(stateName);
+          
+          txt.text(stateName);
+          txt2.text(redditData[stateName].weight);
+          
+          let bounds = path.bounds( state.datum() ); 
+
+          let xPos = (bounds[0][0]+bounds[1][0])/2.0;
+          let yPos = bounds[1][1] - 15;
+          
+          tooltip.attr("transform",`translate(${xPos},${yPos})`);
+          
+          
+          var mo = topojson.mesh(us, us.objects.states, function(a, b) { return a.id === stateID || b.id === stateID; });
+          momesh.datum(mo).attr("d", path)
+          }
+        }
+      
+        function mouseLeavesState() {
+            if (!sidebarFrozen) {
+                tooltip.style("visibility","hidden");
+            let state = d3.select(this);
+            momesh.attr("d", "");
+
+            d3.select('#sidebar').html(`
+           <h2>Can Spacy help visualize geographic responses to r/AskReddit posts?</h2>
+        <p>An exercise in using Spacy's entity recognition to organize thousands of comments on an interactive map for several different r/AskReddit prompts.</p>
+        <p>Hover over a state to begin. Note that numbers refer to cumulative upvotes for comments containing a mention of that state.</p>
+        <p>Click on a state to freeze the sidebar. Click on a state again to go back into hover mode.</p>
+            `)
+            }
+            
+        }
+
+        function mouseClick() {
+            sidebarFrozen = !sidebarFrozen;
+        }
+
+        function populateSidebar(stateName) {
+            d3.select('#sidebar').html(`
+            <h2>Responses mentioning <span class="state-title"></span></h2>
+        <h3>Comments under this Reddit post</h3>
+        <div id="comments">
+            
+        </div>
+        <div id="entity-containers">
+            <h3>Entities mentioned alongside <span class="state-title"></span></h2>
+            <div class="entity-group" id="FAC">
+                <h4>Buildings, airports, highways, bridges, etc. (FAC)</h4>
+                <div class="entity-text"></div>
+            </div>
+            <div class="entity-group" id="GPE">
+                <h4>Geopolitical entities. (GPE)</h4>
+                <div class="entity-text"></div>
+            </div>
+            <div class="entity-group" id="LOC">
+                <h4> Non-geopolitical locations, mountain ranges, bodies of water. (LOC)</h4>
+                <div class="entity-text"></div>
+            </div>
+            <div class="entity-group" id="NORP">
+                <h4>Nationalities or religious or political groups. (NORP)</h4>
+                <div class="entity-text"></div>
+            </div>
+            <div class="entity-group" id="WORK_OF_ART">
+                <h4>Titles of books, songs, etc. (NORP)</h4>
+                <div class="entity-text"></div>
+            </div>
+        </div>
+            `)
+
+            let stateData = redditData[stateName];
+
+            let commentsHTML = "";
+            stateData.comments.forEach(comment => {
+                commentsHTML += "<p class='comment'>" + comment + "</p>"
+            })
+
+            stateData.replies.forEach(reply => {
+                commentsHTML += "<p class='reply'>" + reply + "</p>"
+            })
+
+            d3.select("#comments").html(`<p>${commentsHTML}</p>`);
+
+            d3.selectAll(".state-title").html(stateName);
+
+            entityTypes.forEach((entity) => {
+                d3.select("#" + entity + " > .entity-text").html(`<p>${stateData[entity].join(', ')}</p>`)
+            })
+        }
+      }
+      requestData();
+      
+      </script>
+
+      <script>
+        // handling dropdown interactions
+        const dropdown = document.querySelector('#dropdown');
+        const dropdownButton = dropdown.querySelector('.dropdown-button');
+        const dropdownContent = dropdown.querySelector('.dropdown-content');
+        const dropdownOptions = [...dropdown.querySelectorAll('.dropdown-content span')];
+        const dropdownArrow = dropdown.querySelector('.arrow');
+        const dropdownValue = dropdown.querySelector('.dropdown-value');
+
+        // Handling when dropdown filter chip is clicked
+        dropdownButton.addEventListener('click', (event) => {
+            const isVisible = dropdownContent.style.display === 'block';
+            dropdownContent.style.display = isVisible ? 'none' : 'block';
+            dropdownArrow.classList.toggle("active");
+        });
+
+        const setDropdownWidth = () => {
+            const buttonWidth = dropdownButton.offsetWidth;
+            dropdownContent.style.minWidth = `${buttonWidth}px`;
+            dropdownContent.style.width = `${buttonWidth}px`;
+        };
+
+        addEventListener("load", function () {
+            setDropdownWidth();
+        })
+       
+        // Handling when a dropdown option is selected
+        dropdownContent.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target.tagName.toLowerCase() === 'span') {
+                let newValue = target.innerHTML;
+                dropdownValue.innerHTML = newValue;
+                dropdownOptions.forEach((option) => option.classList.remove("selected-option"));
+                target.classList.add("selected-option");
+                setDropdownWidth();
+            }
+
+            d3.select('.tooltip').remove();
+            d3.select('.mouseover').remove();
+
+            d3.select('#sidebar').html(`
+            <h2>Can Spacy help visualize geographic responses to r/AskReddit posts?</h2>
+        <p>An exercise in using Spacy's entity recognition to organize thousands of comments on an interactive map for several different r/AskReddit prompts.</p>
+        <p>Hover over a state to begin. Note that numbers refer to cumulative upvotes for comments containing a mention of that state.</p>
+        <p>Click on a state to freeze the sidebar. Click on a state again to go back into hover mode.</p>
+            `)
+            
+
+            requestData();
+        });
+
+        // close dropdown if clicked outside
+        window.addEventListener('click', (event) => {
+            if (!dropdown.contains(event.target)) {
+            if (dropdownContent.style.display === 'block') {
+                dropdownContent.style.display = 'none';
+                dropdownArrow.classList.remove("active");
+            }
+            }
+        });
+      </script>
+      
+      </div>
+    </body>
+    </html>
+    
